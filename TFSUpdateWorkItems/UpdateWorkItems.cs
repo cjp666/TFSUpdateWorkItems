@@ -11,6 +11,14 @@ namespace TFSUpdateWorkItems
 		private const string NewSharePointSite = "http://newsharepoint/sites/";
 
 		/// <summary>
+		///		When set to true the code just counts the number of
+		///		external links that point to the old SharePoint site
+		/// </summary>
+		private const bool TestingOnly = false;
+
+		private int _linksToUpdateCount = 0;
+
+		/// <summary>
 		///		Loop through the Product Backlog Items for a project
 		///		and update the work item links from the old SharePoint
 		///		site to the new one
@@ -38,13 +46,13 @@ namespace TFSUpdateWorkItems
 				}
 
 				// create a couple of test external links to be able to update them
-				CreateTestLinks(workItemStore, storyboardType, 1495);
+				// CreateTestLinks(workItemStore, storyboardType, 1495);
 
 				var q = "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = 'SiclopsLIVE' ORDER BY [System.Id]";
 				var workItems = workItemStore.Query(q);
 				foreach (WorkItem workItem in workItems)
 				{
-					if (workItem.Id != 1495)
+					if (!TestingOnly && workItem.Id != 1495)
 					{
 						continue;
 					}
@@ -60,6 +68,7 @@ namespace TFSUpdateWorkItems
 							{
 								if (!attachment.Uri.ToString().StartsWith("http://fshtfs", StringComparison.InvariantCultureIgnoreCase))
 								{
+									// TODO: still need to do something about these, not important for now
 									Console.WriteLine("\t{0}", attachment.Uri);
 								}
 							}
@@ -72,6 +81,8 @@ namespace TFSUpdateWorkItems
 					}
 				}
 			}
+
+			Console.WriteLine("Count of links to update {0}", _linksToUpdateCount);
 		}
 
 		/// <summary>
@@ -105,6 +116,10 @@ namespace TFSUpdateWorkItems
 
 			do
 			{
+				// loop through the external links:
+				// * keeping a track of the storyboard documents on the old SharePoint site
+				// * remove the old link
+				// * add a new link pointing to the same document on the new SharePoint site
 				linkFound = false;
 				workItem = workItemStore.GetWorkItem(workItemId);
 				foreach (var externalLink in workItem.Links)
@@ -124,22 +139,33 @@ namespace TFSUpdateWorkItems
 								var newUri = "vstfs:///Requirements/Storyboard/" + Uri.EscapeDataString(u.Replace(OldSharePointSite, NewSharePointSite));
 								newLinks.Add(newUri);
 
-								workItem.Links.Remove(el);
-								workItem.Save();
+								_linksToUpdateCount++;
 
-								linkFound = true;
-								break;
+								if (!TestingOnly)
+								{
+									workItem.Links.Remove(el);
+									workItem.Save();
+
+									linkFound = true;
+									break;
+								}
 							}
 						}
 					}
 				}
+
+				if (TestingOnly)
+				{
+					break;
+				}
 			} while (linkFound);
 
-			if (newLinks.Count == 0)
+			if (TestingOnly || newLinks.Count == 0)
 			{
 				return;
 			}
 
+			// now add the links that point to the new SharePoint
 			workItem = workItemStore.GetWorkItem(workItemId);
 			foreach (var newLink in newLinks)
 			{
